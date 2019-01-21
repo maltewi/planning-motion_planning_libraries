@@ -150,8 +150,10 @@ class MotionPlanningLibraries
     std::vector<State> mPlannedPathInWorld; // Pose in world coordinates.
     bool mReplanRequired;
     bool mNewGoalReceived;
-    double mLostX; // Used to trac discretization error.
-    double mLostY;
+    double mLostXStart; // Used to trac discretization error.
+    double mLostYStart;
+    double mLostXGoal; // Used to trac discretization error.
+    double mLostYGoal;
     
  public: 
     enum MplErrors mError; 
@@ -300,7 +302,8 @@ class MotionPlanningLibraries
      */
     bool grid2world(envire::TraversabilityGrid const* trav,
             base::samples::RigidBodyState const& grid_pose, 
-            base::samples::RigidBodyState& world_pose);
+            base::samples::RigidBodyState& world_pose,
+            double lost_x, double lost_y);
      
     /**
      * Transforms the pose defined in the grid local frame to world.
@@ -309,7 +312,8 @@ class MotionPlanningLibraries
      */
     bool gridlocal2world(envire::TraversabilityGrid const* trav,
         base::samples::RigidBodyState const& grid_local_pose,
-        base::samples::RigidBodyState& world_pose);
+        base::samples::RigidBodyState& world_pose,
+        double lost_x, double lost_y);
     
  private:
     /**

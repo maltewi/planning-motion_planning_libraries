@@ -23,8 +23,10 @@ MotionPlanningLibraries::MotionPlanningLibraries(Config config) :
         mPlannedPathInWorld(),
         mReplanRequired(false),
         mNewGoalReceived(false),
-        mLostX(0.0),
-        mLostY(0.0),
+        mLostXStart(0.0),
+        mLostYStart(0.0),
+        mLostXGoal(0.0),
+        mLostYGoal(0.0),
         mError(MPL_ERR_NONE) {
             
     // Do some checks.
@@ -222,7 +224,7 @@ bool MotionPlanningLibraries::setStartState(struct State new_state) {
             
             // Start
             base::samples::RigidBodyState new_grid;
-            if(!world2grid(mpTravGrid, new_state.getPose(), new_grid)) {
+            if(!world2grid(mpTravGrid, new_state.getPose(), new_grid, &mLostXStart, &mLostYStart)) {
                 LOG_WARN("Start pose could not be transformed into the grid");
                 return false;
             }
@@ -284,7 +286,7 @@ bool MotionPlanningLibraries::setGoalState(struct State new_state, bool reset) {
             
             // Start
             base::samples::RigidBodyState new_grid;
-            if(!world2grid(mpTravGrid, new_state.getPose(), new_grid, &mLostX, &mLostY)) {
+            if(!world2grid(mpTravGrid, new_state.getPose(), new_grid, &mLostXGoal, &mLostYGoal)) {
                 LOG_WARN("Goal pose could not be transformed into the grid");
                 return false;
             }
@@ -451,10 +453,19 @@ bool MotionPlanningLibraries::plan(double max_time, double& cost) {
     std::vector<State>::iterator it = planned_path.begin();
     base::samples::RigidBodyState rbs_world;
     for(; it != planned_path.end(); it++) {
+        double lost_x=0;
+        double lost_y=0;
+        if(it == planned_path.begin()){
+            lost_x = mLostXStart;
+            lost_y = mLostYStart;
+        }else if(std::next(it) == planned_path.end()){
+            lost_x = mLostXGoal;
+            lost_y = mLostYGoal;
+        }
         if(pos_defined_in_local_grid) {
-            gridlocal2world(mpTravGrid, it->getPose(), rbs_world);
+            gridlocal2world(mpTravGrid, it->getPose(), rbs_world, lost_x, lost_y);
         } else {
-            grid2world(mpTravGrid, it->getPose(), rbs_world);
+            grid2world(mpTravGrid, it->getPose(), rbs_world, lost_x, lost_y);
         }
         it->setPose(rbs_world);
         mPlannedPathInWorld.push_back(*it);
@@ -794,7 +805,8 @@ bool MotionPlanningLibraries::world2grid(envire::TraversabilityGrid const* trav,
 
 bool MotionPlanningLibraries::grid2world(envire::TraversabilityGrid const* trav,
         base::samples::RigidBodyState const& grid_pose,
-        base::samples::RigidBodyState& world_pose) {
+        base::samples::RigidBodyState& world_pose,
+        double lost_x, double lost_y) {
         
     if(trav == NULL) {
         LOG_WARN("grid2world transformation requires a traversability map");
@@ -811,8 +823,8 @@ bool MotionPlanningLibraries::grid2world(envire::TraversabilityGrid const* trav,
     y_local = y_grid * trav->getScaleY() + trav->getOffsetY();
     
     // Readds discretization error based on the set goal pose.
-    x_local += mLostX;
-    y_local += mLostY;
+    x_local += lost_x;
+    y_local += lost_y;
 
     base::samples::RigidBodyState local_pose = grid_pose;
     local_pose.position[0] = x_local;
@@ -830,7 +842,7 @@ bool MotionPlanningLibraries::grid2world(envire::TraversabilityGrid const* trav,
 
 bool MotionPlanningLibraries::gridlocal2world(envire::TraversabilityGrid const* trav,
         base::samples::RigidBodyState const& grid_local_pose,
-        base::samples::RigidBodyState& world_pose) {
+        base::samples::RigidBodyState& world_pose, double lost_x, double lost_y) {
         
     if(trav == NULL) {
         LOG_WARN("grid2world transformation requires a traversability map");
@@ -844,8 +856,8 @@ bool MotionPlanningLibraries::gridlocal2world(envire::TraversabilityGrid const* 
     grid_local_pose_tmp.position[1] += trav->getOffsetY();
     
     // Readds discretization error based on the set goal pose.
-    grid_local_pose_tmp.position[0] += mLostX;
-    grid_local_pose_tmp.position[1] += mLostY;
+    grid_local_pose_tmp.position[0] += lost_x;
+    grid_local_pose_tmp.position[1] += lost_y;
         
     // Transformation LOCAL2WOLRD
     Eigen::Affine3d local2world = trav->getEnvironment()->relativeTransform(
